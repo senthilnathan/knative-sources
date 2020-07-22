@@ -49,6 +49,69 @@ type reconciler struct {
 // reconciler implements Interface
 var _ reconcilerzendesksource.Interface = (*reconciler)(nil)
 
+// FinalizeKind removes our webhooks
+func (r *reconciler) FinalizeKind(ctx context.Context, src *v1alpha1.ZendeskSource) pkgreconciler.Event {
+
+	secretToken, err := r.secretFrom(ctx, src.Namespace, src.Spec.Token.SecretKeyRef)
+	if err != nil {
+		src.Status.MarkNoToken("Could not find the Zendesk API token secret: %v", err)
+		controller.GetEventRecorder(ctx).Eventf(src, corev1.EventTypeWarning,
+			"WebhookDeletionFailed", "Could not delete webhook  %v", err)
+		//return pkgreconciler.NewEvent(corev1.EventTypeNormal, "WebhookDeletionSkipped", "Could not delete webhook %q: %v", source.Status.WebhookIDKey, err)
+	}
+
+	if src.Namespace == "" {
+		controller.GetEventRecorder(ctx).Eventf(src, corev1.EventTypeWarning,
+			"WebhookDeletionFailed", "Namespace not avalible.  %v", err)
+		return err
+	}
+
+	if src.Name == "" {
+		controller.GetEventRecorder(ctx).Eventf(src, corev1.EventTypeWarning,
+			"WebhookDeletionFailed", "Name not avalible.  %v", err)
+		return err
+	}
+
+	if src.Spec.Subdomain == "" {
+		controller.GetEventRecorder(ctx).Eventf(src, corev1.EventTypeWarning,
+			"WebhookDeletionFailed", "Subdomain not avalible.  %v", err)
+		return err
+	}
+
+	if src.Spec.Email == "" {
+		controller.GetEventRecorder(ctx).Eventf(src, corev1.EventTypeWarning,
+			"WebhookDeletionFailed", "Email not avalible.  %v", err)
+		return err
+	}
+
+	title := "io.triggermesh.zendesksource." + src.Namespace + "." + src.Name
+
+	zc := zendesk.NewClient(src.Spec.Email, secretToken, src.Spec.Subdomain, &http.Client{})
+	list, err := zc.ListTargets(ctx)
+
+	var removalErr error
+	for _, T := range list.Targets {
+		if T.Title == title {
+			idString := strconv.Itoa(int(T.ID))
+			removalErr = r.removeWebhookExtension(ctx, idString, zc)
+
+		}
+		if removalErr != nil {
+			return removalErr
+		}
+	}
+
+	return nil
+}
+
+func (r *reconciler) removeWebhookExtension(ctx context.Context, id string, zc zendesk.Client) error {
+	err := zc.DeleteTarget(ctx, id)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
 // ReconcileKind implements Interface.ReconcileKind.
 func (r *reconciler) ReconcileKind(ctx context.Context, src *v1alpha1.ZendeskSource) pkgreconciler.Event {
 	src.Status.CloudEventAttributes = []duckv1.CloudEventAttributes{{Type: v1alpha1.ZendeskSourceEventType}}

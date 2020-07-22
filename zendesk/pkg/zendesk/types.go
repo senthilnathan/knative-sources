@@ -82,3 +82,25 @@ type Page struct {
 	NextPage     *string `json:"next_page"`
 	Count        int64   `json:"count"`
 }
+
+// ListTargetsResponse wraps Target list
+type ListTargetsResponse struct {
+	Targets []Target `json:"targets"`
+	Page
+}
+
+// TargetCreate wraps Target creation
+type TargetCreate struct {
+	Target Target `json:"target"`
+}
+
+// TriggerCreate wraps Trigger creation
+type TriggerCreate struct {
+	Trigger Trigger `json:"trigger"`
+}
+
+// ListTriggersResponse wraps Trigger list
+type ListTriggersResponse struct {
+	Triggers []Trigger `json:"triggers"`
+	Page
+}
